@@ -1,7 +1,7 @@
 
 
-$DFIR_DIR   = '\\svr-w10-fsync01\dfir'
-$TOOLS_DIR  = '\\svr-w10-fsync01\dfir\tools'
+$DFIR_DIR   = '\\servername\dfir'          # Change this to your DFIR share, where the collection will be stored
+$TOOLS_DIR  = '\\servername\dfir\tools'    # Change this to your DFIR share, where the KAPE.zip file is stored
 
 function Write-Console {
     [CmdletBinding()]
@@ -17,7 +17,7 @@ function Write-Console {
     $status = @{
         info    = '[+]'
         warning = '[!]'
-        error   = '[x]'
+        error   = '[E]'
     }
 
     Write-Host "$($status[$Level]) $Message"
@@ -88,23 +88,37 @@ else {
     for ($i = 0; $i -lt $allTargets.Count; $i++) {
         $allTargets[$i] = $allTargets[$i].Trim()
         if ($allTargets[$i] -in ('SANS_Triage', 'BasicCollection')) {
-            Write-Console "Target $($allTargets[$i]) is a bundle. Expanding..."
+            Write-Console "Target $($allTargets[$i]) needs a !..." warning
             $allTargets[$i] = '!' + $allTargets[$i]
         }
+        if ($allTargets[$i] -in ('Boot', 'J', 'LogFile', 'MFT', 'MFTMirr', 'SDS', 'T')) {
+            Write-Console "Target $($allTargets[$i]) needs a `$..." 'warning'
+            $allTargets[$i] = '$' + $allTargets[$i]
+        }
     }
-    $kapeZip        = "$TOOLS_DIR.zip"
+
+
+    $kapeZip        = "$TOOLS_DIR\KAPE.zip"
     $expandDir      = "$env:PUBLIC\KAPE"
     $targetSource   = $env:SystemDrive
     $targetDest     = "$expandDir\collection"
+
+    Write-Console "Starting KAPE collection..."
+    Write-Console "`t Target(s).....: $($allTargets -join ', ')"
+    Write-Console "`t Source........: $targetSource"
+    Write-Console "`t Destination...: $targetDest"
+    Write-Console "`t Hostname......: $($env:COMPUTERNAME)"
+    Write-Console "`t DFIR Share....: $DFIR_DIR"
+    Write-Console "`t Tools Share...: $TOOLS_DIR"
 
     if (Test-Path $expandDir) {
         Write-Console "Removing existing KAPE directory..."
         Remove-Item -Path $expandDir -Recurse -Force
     }
 
+    Write-Console "Checking for KAPE.zip on DFIR share ($TOOLS_DIR)..."
     if (-not (Test-Path $kapeZip)) {
-        Write-Console "KAPE.zip not found on DFIR share." 'error'
-        Write-Console "Exiting..." 'error'
+        Write-Console "$kapZip not found, Exiting." 'error'
         exit
     }
     else {
@@ -113,12 +127,13 @@ else {
         $null = New-Item -Path $targetDest -ItemType Directory -Force
 
         Write-Console "Copying 7z.e $expandDir"
-        Copy-Item -Path "$TOOLS_DIR estination $expandDir -Force
-        Copy-Item -Path "$TOOLS_DIR estination $expandDir -Force
-        Copy-Item -Path "$TOOLS_DIRp.dll" -Destination $expandDir -Force
+        Copy-Item -Path "$TOOLS_DIR\7z.exe" -Destination $expandDir -Force
+        Copy-Item -Path "$TOOLS_DIR\7z.dll" -Destination $expandDir -Force
+        Copy-Item -Path "$TOOLS_DIR\7-zip.dll" -Destination $expandDir -Force
 
         Write-Console "Setting KAPE working directory to $expandDir"
         Set-Location -Path $expandDir
+        
         Write-Console "Starting KAPE collection..."
         Write-Console "Running command: .\kape.exe --tsource $targetSource --tdest $targetDest --tflush --target $allTargets"
         & .\kape.exe --tsource $targetSource --tdest $targetDest --tflush --target $allTargets
@@ -135,6 +150,7 @@ else {
         
         Write-Console "Collection zipped to $zipFile"
         Set-Location -Path $env:SystemDrive
+        
         Write-Console "Cleaning up raw collection and KAPE files..."
         Remove-Item -Path "$expandDir\collection" -Recurse -Force -ErrorAction SilentlyContinue
     }
